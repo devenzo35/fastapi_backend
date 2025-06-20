@@ -1,6 +1,20 @@
-from fastapi import Body, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
+from database import engine, SessionLocal, Base
+from sqlalchemy.orm import Session
+from schemas import UserCreate, UserOut
+from models import User
 from typing import Union, Any
 from pydantic import BaseModel
+
+Base.metadata.create_all(bind=engine)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 class Item(BaseModel):
@@ -25,6 +39,21 @@ user_list = [
     User(user_id=2, name="Jane", surname="Doe", email="jane@email.com", age=25),
     User(user_id=3, name="Alice", surname="Smith", email="sdasd@email.com", age=28),
 ]
+
+
+@app.post("/users", response_model=UserOut)
+def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User doesn't exist",
+            headers={"error": "UserNotFound"},
+        )
+    db_user = User(**user.model_dump())
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
 
 
 @app.get("/users/{user_id}/item/{item_id}")
